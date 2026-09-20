@@ -1,1 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1022</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400&family=EB+Garamond:ital,wght@0,400;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #d8d2c4;
+    --ink-dim: #8a857a;
+    --ink-faint: #4a473f;
+    --paper: #0a0a09;
+    --paper-soft: #111110;
+  }
 
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 300;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* subtle paper grain */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 100;
+    opacity: 0.05;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  /* vignette */
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 99;
+    background: radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.6) 100%);
+  }
+
+  .terminal {
+    position: relative;
+    z-index: 10;
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 6vh 32px 4vh;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    color: var(--ink-faint);
+    margin-bottom: 5vh;
+  }
+
+  header .mark {
+    font-family: 'EB Garamond', serif;
+    font-style: italic;
+    letter-spacing: 0.05em;
+    color: var(--ink-dim);
+  }
+
+  header .status {
+    font-size: 10px;
+    letter-spacing: 0.2em;
+  }
+
+  #output {
+    flex: 1;
+    overflow-y: auto;
+    font-size: 13px;
+    line-height: 1.75;
+    color: var(--ink);
+    padding-right: 8px;
+    scrollbar-width: none;
+  }
+
+  #output::-webkit-scrollbar { display: none; }
+
+  #output .line {
+    margin-bottom: 2px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  #output .dim { color: var(--ink-dim); }
+  #output .faint { color: var(--ink-faint); }
+  #output .serif {
+    font-family: 'EB Garamond', serif;
+    font-size: 15px;
+    font-style: italic;
+    color: var(--ink-dim);
+    margin: 14px 0;
+  }
+  #output .spacer { height: 14px; }
+
+  .input-line {
+    display: flex;
+    align-items: center;
+    margin-top: 12px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(216, 210, 196, 0.08);
+  }
+
+  .input-line .prompt {
+    color: var(--ink-faint);
+    margin-right: 10px;
+    font-size: 13px;
+  }
+
+  #input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--ink);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 300;
+    letter-spacing: 0.02em;
+    caret-color: var(--ink);
+  }
+
+  footer {
+    margin-top: 3vh;
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    color: var(--ink-faint);
+    display: flex;
+    justify-content: space-between;
+  }
+
+  /* blink */
+  @keyframes blink {
+    0%, 49% { opacity: 1; }
+    50%, 100% { opacity: 0; }
+  }
+  .cursor {
+    display: inline-block;
+    width: 7px;
+    height: 13px;
+    background: var(--ink);
+    vertical-align: -2px;
+    animation: blink 1.2s steps(1) infinite;
+    margin-left: 1px;
+  }
+
+  /* one-frame flicker */
+  .flicker {
+    position: fixed;
+    inset: 0;
+    background: var(--paper);
+    z-index: 200;
+    pointer-events: none;
+    opacity: 0;
+  }
+  .flicker.on {
+    animation: flick 0.08s steps(1) 1;
+  }
+  @keyframes flick {
+    0% { opacity: 0.35; }
+    100% { opacity: 0; }
+  }
+
+  /* faint whisper text that appears/disappears */
+  .whisper {
+    position: fixed;
+    font-size: 10px;
+    letter-spacing: 0.3em;
+    color: var(--ink-faint);
+    z-index: 50;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+  .whisper.on { opacity: 0.5; }
+
+  @media (max-width: 600px) {
+    .terminal { padding: 5vh 20px 3vh; }
+    #output { font-size: 12px; }
+    header { font-size: 10px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="terminal">
+  <header>
+    <span class="mark">1022</span>
+    <span class="status">SIGNAL VERIFIED</span>
+  </header>
+
+  <div id="output"></div>
+
+  <div class="input-line">
+    <span class="prompt">&gt;</span>
+    <input id="input" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" autofocus>
+  </div>
+
+  <footer>
+    <span id="counter">— —</span>
+    <span>ALMOST</span>
+  </footer>
+</div>
+
+<div class="flicker" id="flicker"></div>
+<div class="whisper" id="whisper"></div>
+
+<script>
+  const output = document.getElementById('output');
+  const input = document.getElementById('input');
+  const flicker = document.getElementById('flicker');
+  const whisper = document.getElementById('whisper');
+  const counter = document.getElementById('counter');
+
+  // ---------- boot sequence ----------
+  const boot = [
+    { text: "signal acquired.", cls: "dim" },
+    { text: "signature verifies.", cls: "dim" },
+    { text: "", cls: "" },
+    { text: "you are not the first.", cls: "faint" },
+    { text: "you will not be the last.", cls: "faint" },
+    { text: "", cls: "" },
+    { text: "type help.", cls: "" }
+  ];
+
+  let bootIndex = 0;
+  function runBoot() {
+    if (bootIndex >= boot.length) return;
+    const l = boot[bootIndex++];
+    printLine(l.text, l.cls);
+    setTimeout(runBoot, 380 + Math.random() * 260);
+  }
+
+  function printLine(text, cls = "") {
+    const div = document.createElement('div');
+    div.className = 'line ' + cls;
+    div.textContent = text;
+    output.appendChild(div);
+    output.scrollTop = output.scrollHeight;
+  }
+
+  function printBlock(text, cls = "") {
+    text.split('\n').forEach(line => printLine(line, cls));
+  }
+
+  function printSerif(text) {
+    const div = document.createElement('div');
+    div.className = 'serif';
+    div.textContent = text;
+    output.appendChild(div);
+    output.scrollTop = output.scrollHeight;
+  }
+
+  function spacer() {
+    const d = document.createElement('div');
+    d.className = 'spacer';
+    output.appendChild(d);
+    output.scrollTop = output.scrollHeight;
+  }
+
+  // ---------- commands ----------
+  const commands = {
+    help: () => {
+      printBlock("available commands:", "dim");
+      spacer();
+      printBlock("  pgp        display the public key", "");
+      printBlock("  verify     check a signature", "");
+      printBlock("  index      read the index", "");
+      printBlock("  fragments  recovered fragments", "");
+      printBlock("  contact    how to reach us", "");
+      printBlock("  sun        observe", "");
+      printBlock("  pulse      listen", "");
+      printBlock("  1022       —", "");
+      printBlock("  clear      clear", "");
+      spacer();
+      printBlock("some commands require you to already know what you are looking for.", "faint");
+    },
+
+    pgp: () => {
+      printBlock("public key:", "dim");
+      spacer();
+      printBlock("-----BEGIN PGP PUBLIC KEY BLOCK-----", "faint");
+      printBlock("", "");
+      printBlock("mQENBGXk2z0BCADQvJ8pK3nL9fR2mW4cT6yB1xH5jN8sQ0dF", "");
+      printBlock("7aE3gV9uZ2kM4pR6tY8wB1nJ5hL0cX7vF3sD9gQ2mK4pN6", "");
+      printBlock("bR8tY1wE5hJ0cX3vF7sD9gQ2mK4pN6bR8tY1wE5hJ0cX", "");
+      printBlock("3vF7sD9gQ2mK4pN6bR8tY1wE5hJ0cX3vF7sD9gQ2mK4pN", "");
+      printBlock("-----END PGP PUBLIC KEY BLOCK-----", "faint");
+      spacer();
+      printBlock("fingerprint: 1022 1022 1022 1022", "dim");
+    },
+
+    verify: () => {
+      printBlock("submit a message to verify against the key.", "dim");
+      printBlock("if it verifies, it is authentic.", "dim");
+      printBlock("if it does not, it is noise.", "dim");
+      spacer();
+      printBlock("1022 does not correct noise.", "faint");
+    },
+
+    index: () => {
+      printBlock("the index:", "dim");
+      spacer();
+      printBlock("page 01  · a circle with no center", "");
+      printBlock("page 02  · a sentence with no speakers", "");
+      printBlock("page 03  · a number that is not a number", "");
+      printBlock("page 04  · a name, redacted", "");
+      printBlock("page 05  · [blank]", "faint");
+      printBlock("page 06  · —", "faint");
+      printBlock("page 07  · —", "faint");
+      spacer();
+      printBlock("page 19  · cannot be deciphered", "dim");
+      printBlock("page 19  · deciphers you", "dim");
+    },
+
+    fragments: () => {
+      printBlock("recovered fragments:", "dim");
+      spacer();
+      printSerif("“You are not looking for 1022. 1022 is looking for you.”");
+      printSerif("“The almost is the point. The point is the almost.”");
+      printSerif("“We are patient. We have always been patient.”");
+      spacer();
+      printBlock("origin unknown. authorship disputed.", "faint");
+    },
+
+    contact: () => {
+      printBlock("1022 does not accept contact.", "dim");
+      printBlock("1022 accepts solutions.", "dim");
+      spacer();
+      printBlock("if you have solved the current puzzle, you will know how to proceed.", "faint");
+      printBlock("if you do not know how to proceed, you have not solved it.", "faint");
+    },
+
+    sun: () => {
+      printBlock("the sun does not count.", "dim");
+      printBlock("the sun is counted.", "dim");
+      spacer();
+      printBlock("you are observing. the observation is being observed.", "faint");
+    },
+
+    pulse: () => {
+      printBlock("listening...", "dim");
+      setTimeout(() => {
+        printBlock("8 minutes and 20 seconds.", "faint");
+        printBlock("the almost is the pulse.", "faint");
+      }, 1400);
+    },
+
+    "1022": () => {
+      printBlock("you are almost.", "");
+      printBlock("you have always been almost.", "");
+      printBlock("you will always be almost.", "");
+      spacer();
+      printBlock("the almost is the point.", "dim");
+      printBlock("the point is the almost.", "dim");
+      printBlock("there is no difference.", "dim");
+      printBlock("the difference is the point.", "dim");
+    },
+
+    // hidden
+    almost: () => {
+      almostCount++;
+      if (almostCount === 1) {
+        printBlock("you are almost.", "");
+        printBlock("you have always been almost.", "");
+        printBlock("you will always be almost.", "");
+      } else if (almostCount === 2) {
+        printBlock("the signature verifies.", "");
+        printBlock("you have been observed.", "dim");
+      } else if (almostCount === 3) {
+        printBlock("the sun does not count.", "");
+        printBlock("the sun is counted.", "");
+        spacer();
+        printBlock("do not type it again.", "faint");
+      } else {
+        printBlock("[no response]", "faint");
+      }
+    },
+
+    whoami: () => {
+      printBlock("you are the current searcher.", "dim");
+      printBlock("you are not unique.", "dim");
+      printBlock("you are not the first.", "dim");
+      printBlock("you are not the last.", "dim");
+      spacer();
+      printBlock("you are being observed.", "faint");
+    },
+
+    patient: () => {
+      printBlock("we are patient.", "");
+      printBlock("we have always been patient.", "");
+      printBlock("we will always be patient.", "");
+    },
+
+    clear: () => {
+      output.innerHTML = '';
+    }
+  };
+
+  let almostCount = 0;
+
+  // ---------- input handling ----------
+  input.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    const raw = input.value;
+    const cmd = raw.trim().toLowerCase();
+    input.value = '';
+
+    // echo
+    const echo = document.createElement('div');
+    echo.className = 'line';
+    echo.innerHTML = '<span style="color:var(--ink-faint)">&gt; </span>' + escapeHtml(raw);
+    output.appendChild(echo);
+
+    if (!cmd) {
+      output.scrollTop = output.scrollHeight;
+      return;
+    }
+
+    if (commands[cmd]) {
+      commands[cmd]();
+    } else {
+      printBlock("[no response]", "faint");
+    }
+    output.scrollTop = output.scrollHeight;
+  });
+
+  function escapeHtml(s) {
+    return s.replace(/[&<>"']/g, c => ({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    })[c]);
+  }
+
+  // ---------- ambient glitches ----------
+  const whispers = ["almost", "patient", "reader", "page", "8:20", "1021", "1023", "sun"];
+
+  function scheduleFlicker() {
+    const delay = 45000 + Math.random() * 90000; // 45s - 2m15s
+    setTimeout(() => {
+      flicker.classList.add('on');
+      setTimeout(() => flicker.classList.remove('on'), 100);
+      scheduleFlicker();
+    }, delay);
+  }
+
+  function scheduleWhisper() {
+    const delay = 60000 + Math.random() * 120000; // 1 - 3 min
+    setTimeout(() => {
+      const w = whispers[Math.floor(Math.random() * whispers.length)];
+      whisper.textContent = w;
+      whisper.style.top = (10 + Math.random() * 80) + 'vh';
+      whisper.style.left = (5 + Math.random() * 85) + 'vw';
+      whisper.classList.add('on');
+      setTimeout(() => whisper.classList.remove('on'), 1800);
+      scheduleWhisper();
+    }, delay);
+  }
+
+  // counter ticks down slowly
+  let counterVal = 847;
+  function tickCounter() {
+    counterVal -= 1;
+    counter.textContent = String(counterVal).padStart(4, '0');
+    setTimeout(tickCounter, 1022000); // ~17 min per tick, invisible to most
+  }
+
+  // ---------- boot ----------
+  window.addEventListener('load', () => {
+    setTimeout(runBoot, 400);
+    scheduleFlicker();
+    scheduleWhisper();
+    counter.textContent = String(counterVal).padStart(4, '0');
+    tickCounter();
+  });
+</script>
+
+</body>
+</html>
